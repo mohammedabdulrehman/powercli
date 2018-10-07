@@ -63,3 +63,7 @@ Write-Host "VM Spin-up is Sucessfull"
   Write-Host $ErrorMessage
 
   }
+
+
+
+.\VMSpinup.ps1 -VMName "Final" -ImageFile "C:\Users\Administrator\Desktop\en_windows_server_2012_r2_x64_dvd_2707946" -AutoUnattendFile "C:\Users\Administrator\Desktop\autounattend.xml"
