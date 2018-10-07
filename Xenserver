@@ -1,0 +1,65 @@
+# Parameters
+Param(
+$VMName,
+$ImageFile="C:\Users\Administrator\Desktop\en_windows_server_2012_r2_x64_dvd_2707946",
+$Template = "Windows Server 2016 (64-bit)",
+$BootFile="C:\Users\Administrator\Desktop\winexe\Oscdimg\etfsboot.com",
+$ISOTool = "C:\Users\Administrator\Desktop\winexe\Oscdimg\oscdimg.exe",
+$XenServerHost = "10.214.60.107",
+$UserName = "root",
+$Password = "Wipro@2014",
+$AutoUnattendFile
+
+) 
+Try{
+    write-host "Connecting to XenServe...r"
+    $Session = Connect-XenServer -Url https://$XenServerHost -UserName $UserName -Password $Password -NoWarnCertificates -SetDefaultSession
+    Write-Host "Connected Sucessfully"
+$StorageRepositoryName = "Local Storage"
+Invoke-XenVM -Name $Template -XenAction Clone -NewName $VMname
+$newvmspecs = Get-XenVM -name $VMname
+$sr = Get-XenSR -Name $StorageRepositoryName
+$other_config = $newvmspecs.other_config
+$other_config["disks"] = $other_config["disks"].Replace('sr=""', 'sr="{0}"' -f $sr.uuid)
+ 
+Set-XenVM -Name $VMname -OtherConfig $other_config
+ 
+Invoke-XenVM -Name $VMname -XenAction Provision
+
+
+    $ISOPath = $ImageFile
+    Copy-Item $AutoUnattendFile -Destination $ISOPath"\AutoUnattend.xml" -Force
+
+    $ISOArg ="-n -m -b$BootFile $ISOPath C:\ISO\$VMName.iso"
+    Write-Host "Creating New Iso File with Name $VMName.iso at C:\ISO Please Wait......"
+    Start-Process -FilePath $ISOTool -ArgumentList $ISOArg -PassThru -wait
+    write-host "$VMName.iso at C:\ISO Created Successfully"
+
+
+
+$DiskName = $VMname + "_Disk01"
+$DiskinGB = 10GB
+$StorageRepositoryName = "Local Storage"
+ 
+$VM = Get-XenVM -Name $VMname
+$sr = Get-XenSR -Name $StorageRepositoryName
+ 
+New-XenVDI -NameLabel $DiskName -VirtualSize $DiskinGB -SR $sr -Type user
+ 
+$VDI = Get-XenVDI -Name $DiskName
+ 
+New-XenVBD -VM $VM.opaque_ref -VDI $VDI.opaque_ref -Type CD -Mode RO -Userdevice 1
+ get-xenvm -Name $VMName | select -ExpandProperty VBDs | Get-XenVBD | where {$_.type -eq "CD"} | Invoke-XenVBD -XenAction Eject
+
+get-xenvm -Name $VMName | select -ExpandProperty VBDs | Get-XenVBD | where {$_.type -eq "CD"} | Invoke-XenVBD -XenAction Insert -VDI (Get-XenVDI -Name $VMName".iso" | Select -ExpandProperty opaque_ref)
+$VM = Get-XenVM -Name $VMName
+write-host "Starting $VMName"
+Invoke-XenVM -VM $VM -XenAction Start -Async
+Write-Host "VM Spin-up is Sucessfull"
+  }
+  Catch
+  {
+  $ErrorMessage = $_.Exception.Message
+  Write-Host $ErrorMessage
+
+  }
